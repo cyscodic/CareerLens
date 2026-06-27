@@ -514,6 +514,20 @@ function ResultsView({ result, onNew }) {
                     <Badge className={scoreBg(r.fit_score) + ' text-white border-0'}>{r.fit_score}</Badge>
                   </div>
                   <p className="text-xs text-slate-600 mt-1">{r.why}</p>
+                  <div className="flex gap-2 mt-2">
+                    <a href={`https://www.linkedin.com/jobs/search/?keywords=${encodeURIComponent(r.role)}`} target="_blank" rel="noopener noreferrer"
+                       className="text-xs text-blue-600 hover:text-blue-800 flex items-center gap-1 underline-offset-2 hover:underline">
+                      <ExternalLink className="w-3 h-3" /> LinkedIn
+                    </a>
+                    <a href={`https://wellfound.com/jobs?role=${encodeURIComponent(r.role)}`} target="_blank" rel="noopener noreferrer"
+                       className="text-xs text-emerald-600 hover:text-emerald-800 flex items-center gap-1 underline-offset-2 hover:underline">
+                      <ExternalLink className="w-3 h-3" /> Wellfound
+                    </a>
+                    <a href={`https://www.google.com/search?q=${encodeURIComponent(r.role + ' jobs')}`} target="_blank" rel="noopener noreferrer"
+                       className="text-xs text-slate-600 hover:text-slate-800 flex items-center gap-1 underline-offset-2 hover:underline">
+                      <ExternalLink className="w-3 h-3" /> Google
+                    </a>
+                  </div>
                 </div>
               ))}
             </CardContent>
@@ -644,7 +658,14 @@ function ResultsView({ result, onNew }) {
                         {j.key_requirements.slice(0,5).map((k, idx) => <Badge key={idx} variant="outline" className="text-[10px]">{k}</Badge>)}
                       </div>
                     )}
-                    <p className="text-xs text-emerald-700 pt-1 flex items-center gap-1"><ExternalLink className="w-3 h-3" /> {j.where_to_apply}</p>
+                    <a
+                      href={`https://www.linkedin.com/jobs/search/?keywords=${encodeURIComponent((j.title || '') + ' ' + (j.company || ''))}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-xs text-emerald-700 hover:text-emerald-900 pt-1 flex items-center gap-1 underline-offset-2 hover:underline"
+                    >
+                      <ExternalLink className="w-3 h-3" /> Search on LinkedIn — {j.where_to_apply}
+                    </a>
                   </CardContent>
                 </Card>
               ))}
