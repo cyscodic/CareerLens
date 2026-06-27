@@ -193,7 +193,7 @@ function InputPanel({ onAnalyze, loading }) {
           onClick={() => onAnalyze({ resumeText, jobDescription, resumeName: resumeName || 'Untitled Resume', jobTitle })}
           className="bg-indigo-600 hover:bg-indigo-700 text-white px-8 shadow-lg shadow-indigo-200"
         >
-          {loading ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Analyzing with GPT-4o...</> : <><Sparkles className="w-4 h-4 mr-2" /> Analyze Resume</>}
+          {loading ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Analyzing...</> : <><Sparkles className="w-4 h-4 mr-2" /> Analyze Resume</>}
         </Button>
       </div>
     </div>
@@ -571,7 +571,7 @@ function App() {
 
       <footer className="border-t border-slate-200 mt-12">
         <div className="container mx-auto px-6 py-6 max-w-7xl text-xs text-slate-500 text-center">
-          CareerLens • AI analysis powered by GPT-4o • Built for honest, explainable feedback
+          CareerLens • Heuristic ATS engine • Free, fast, explainable — no AI needed
         </div>
       </footer>
     </div>

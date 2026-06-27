@@ -1,8 +1,8 @@
 import { MongoClient } from 'mongodb'
 import { v4 as uuidv4 } from 'uuid'
 import { NextResponse } from 'next/server'
-import OpenAI from 'openai'
 import mammoth from 'mammoth'
+import { analyzeHeuristic } from '@/lib/heuristic_analyzer'
 
 export const runtime = 'nodejs'
 export const maxDuration = 120
@@ -18,14 +18,6 @@ async function connectToMongo() {
     db = client.db(process.env.DB_NAME)
   }
   return db
-}
-
-// OpenAI client pointed at Emergent universal LLM gateway
-function getOpenAI() {
-  return new OpenAI({
-    apiKey: process.env.EMERGENT_LLM_KEY,
-    baseURL: 'https://integrations.emergentagent.com/llm',
-  })
 }
 
 function handleCORS(response) {
@@ -54,91 +46,9 @@ async function parseDocxBuffer(buf) {
   return result.value || ''
 }
 
-// ---- Analysis prompt + schema ----
-const ANALYSIS_SYSTEM = `You are an elite senior tech recruiter, ATS expert, and career coach.
-You will analyze a candidate's resume against a target job description (JD).
-
-STRICT RULES:
-- NEVER invent skills, tools, projects, certifications, or experience the candidate does not have.
-- Base all judgments only on text present in the resume and JD.
-- Be specific, actionable, and honest. Avoid generic advice.
-- For tailored bullets, only rewrite or sharpen bullets that already exist or are clearly implied by the resume. Mark suggested_bullet with rationale grounded in actual experience.
-- For project ideas, suggest projects the candidate could DO to close gaps (not lies about past work).
-- Score with a hybrid approach: keyword match, semantic similarity, structure/readability, role fit, skill coverage, experience fit. Explain each.
-
-Return JSON ONLY matching the provided schema. No prose, no markdown.`
-
-function analysisSchema() {
-  return {
-    type: 'object',
-    additionalProperties: false,
-    properties: {
-      summary: { type: 'string', description: '2-3 sentence neutral summary of the candidate based only on resume.' },
-      ats_score: { type: 'integer', minimum: 0, maximum: 100 },
-      score_breakdown: {
-        type: 'object',
-        additionalProperties: false,
-        properties: {
-          keyword_match: { type: 'object', additionalProperties: false, properties: { score: { type: 'integer' }, weight: { type: 'integer' }, reason: { type: 'string' } }, required: ['score', 'weight', 'reason'] },
-          semantic_similarity: { type: 'object', additionalProperties: false, properties: { score: { type: 'integer' }, weight: { type: 'integer' }, reason: { type: 'string' } }, required: ['score', 'weight', 'reason'] },
-          structure_readability: { type: 'object', additionalProperties: false, properties: { score: { type: 'integer' }, weight: { type: 'integer' }, reason: { type: 'string' } }, required: ['score', 'weight', 'reason'] },
-          role_fit: { type: 'object', additionalProperties: false, properties: { score: { type: 'integer' }, weight: { type: 'integer' }, reason: { type: 'string' } }, required: ['score', 'weight', 'reason'] },
-          skill_coverage: { type: 'object', additionalProperties: false, properties: { score: { type: 'integer' }, weight: { type: 'integer' }, reason: { type: 'string' } }, required: ['score', 'weight', 'reason'] },
-          experience_fit: { type: 'object', additionalProperties: false, properties: { score: { type: 'integer' }, weight: { type: 'integer' }, reason: { type: 'string' } }, required: ['score', 'weight', 'reason'] },
-        },
-        required: ['keyword_match', 'semantic_similarity', 'structure_readability', 'role_fit', 'skill_coverage', 'experience_fit'],
-      },
-      job_fit_score: { type: 'integer', minimum: 0, maximum: 100, description: 'How well this resume matches the JD specifically.' },
-      strengths: { type: 'array', items: { type: 'object', additionalProperties: false, properties: { title: { type: 'string' }, detail: { type: 'string' } }, required: ['title', 'detail'] } },
-      weak_points: { type: 'array', items: { type: 'object', additionalProperties: false, properties: { title: { type: 'string' }, detail: { type: 'string' }, severity: { type: 'string', enum: ['low', 'medium', 'high'] } }, required: ['title', 'detail', 'severity'] } },
-      red_flags: { type: 'array', items: { type: 'object', additionalProperties: false, properties: { title: { type: 'string' }, detail: { type: 'string'} }, required: ['title', 'detail'] } },
-      missing_keywords: { type: 'array', items: { type: 'object', additionalProperties: false, properties: { keyword: { type: 'string' }, importance: { type: 'string', enum: ['must-have', 'nice-to-have'] }, where_to_add: { type: 'string' } }, required: ['keyword', 'importance', 'where_to_add'] } },
-      skill_gaps: { type: 'array', items: { type: 'object', additionalProperties: false, properties: { skill: { type: 'string' }, why_it_matters: { type: 'string' }, how_to_learn: { type: 'string' } }, required: ['skill', 'why_it_matters', 'how_to_learn'] } },
-      tailored_bullets: { type: 'array', items: { type: 'object', additionalProperties: false, properties: { section: { type: 'string' }, original: { type: 'string' }, rewritten: { type: 'string' }, rationale: { type: 'string' } }, required: ['section', 'original', 'rewritten', 'rationale'] } },
-      project_ideas: { type: 'array', items: { type: 'object', additionalProperties: false, properties: { title: { type: 'string' }, description: { type: 'string' }, skills_practiced: { type: 'array', items: { type: 'string' } }, effort_hours: { type: 'integer' } }, required: ['title', 'description', 'skills_practiced', 'effort_hours'] } },
-      role_recommendations: { type: 'array', items: { type: 'object', additionalProperties: false, properties: { role: { type: 'string' }, fit_score: { type: 'integer' }, why: { type: 'string' } }, required: ['role', 'fit_score', 'why'] } },
-      action_plan: {
-        type: 'object',
-        additionalProperties: false,
-        properties: {
-          short_term: { type: 'array', items: { type: 'object', additionalProperties: false, properties: { step: { type: 'string' }, impact: { type: 'string' } }, required: ['step', 'impact'] } },
-          medium_term: { type: 'array', items: { type: 'object', additionalProperties: false, properties: { step: { type: 'string' }, impact: { type: 'string' } }, required: ['step', 'impact'] } },
-          long_term: { type: 'array', items: { type: 'object', additionalProperties: false, properties: { step: { type: 'string' }, impact: { type: 'string' } }, required: ['step', 'impact'] } },
-        },
-        required: ['short_term', 'medium_term', 'long_term'],
-      },
-      interview_prep: { type: 'array', items: { type: 'object', additionalProperties: false, properties: { topic: { type: 'string' }, question: { type: 'string' }, why: { type: 'string' } }, required: ['topic', 'question', 'why'] } },
-    },
-    required: ['summary', 'ats_score', 'score_breakdown', 'job_fit_score', 'strengths', 'weak_points', 'red_flags', 'missing_keywords', 'skill_gaps', 'tailored_bullets', 'project_ideas', 'role_recommendations', 'action_plan', 'interview_prep'],
-  }
-}
-
-async function runAnalysis(resumeText, jobDescription, userId) {
-  const openai = getOpenAI()
-  const userMsg = `RESUME:\n"""\n${resumeText.slice(0, 18000)}\n"""\n\nJOB DESCRIPTION:\n"""\n${(jobDescription || '').slice(0, 8000) || '(No JD provided — give general ATS analysis and role recommendations from resume alone.)'}\n"""\n\nReturn structured JSON per the schema.`
-
-  const resp = await openai.chat.completions.create({
-    model: 'gpt-4o',
-    temperature: 0.2,
-    user: userId || 'careerlens-user',
-    response_format: {
-      type: 'json_schema',
-      json_schema: { name: 'resume_analysis', strict: true, schema: analysisSchema() },
-    },
-    messages: [
-      { role: 'system', content: ANALYSIS_SYSTEM },
-      { role: 'user', content: userMsg },
-    ],
-    // LiteLLM proxy budget mapping — pass user metadata
-    // @ts-ignore
-    metadata: { user_id: userId || 'careerlens-user', app: 'careerlens' },
-  }, {
-    headers: {
-      'x-user-id': userId || 'careerlens-user',
-    },
-  })
-  const txt = resp.choices?.[0]?.message?.content || '{}'
-  return JSON.parse(txt)
+// ---- Analysis (heuristic, no AI needed) ----
+function runAnalysis(resumeText, jobDescription) {
+  return analyzeHeuristic(resumeText, jobDescription)
 }
 
 // ---- Route handlers ----
@@ -201,7 +111,7 @@ async function handleRoute(request, { params }) {
 
       let analysis
       try {
-        analysis = await runAnalysis(resumeText, jobDescription, userId)
+        analysis = runAnalysis(resumeText, jobDescription)
       } catch (e) {
         console.error('LLM error:', e)
         return handleCORS(NextResponse.json({ error: 'AI analysis failed: ' + (e.message || 'unknown') }, { status: 500 }))
