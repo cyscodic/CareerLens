@@ -1,13 +1,16 @@
 # CareerLens
 
-**AI-powered resume analyzer & ATS scorer.** Upload PDF/DOCX/TXT or paste text, paste a job description, and get instant explainable feedback — ATS score, strengths, weak points, red flags, missing keywords, tailored bullets, project ideas, action plan + AI resume rewriting, cover letter generation, and job matching.
+> AI-powered resume analyzer & ATS scorer — upload your resume, paste a job description, get instant actionable feedback.
 
+🔗 **Live:** [career-lens-codic.vercel.app](https://career-lens-codic.vercel.app)
+
+---
 
 ## Features
 
-### Core analysis (MVP)
-- Upload PDF / DOCX / TXT resume (parsed via `pdf-parse` + `mammoth`) or paste text
-- **6-dimensional ATS score** — keyword match, semantic similarity, structure & readability, role fit, skill coverage, experience fit — each fully explained
+### Core Analysis
+- Upload **PDF / DOCX / TXT** or paste resume text
+- **6-dimensional ATS score** — keyword match, semantic similarity, structure & readability, role fit, skill coverage, experience fit
 - Job fit score against a specific JD
 - Strengths, weak points (with severity), red flags
 - Missing keywords with importance + where-to-add hints
@@ -18,87 +21,103 @@
 - Short / medium / long-term action plan
 - Interview prep questions tailored to the resume
 
-### Phase 2 (AI-powered)
-- **Rewrite Resume** — full resume rewrite tailored to a target JD, with change summary
-- **Generate Cover Letter** — 250-350 word personalized letter with company-specific hook, tone selector (confident / warm / direct / storytelling)
-- **Find Matching Jobs** — 6 realistic job openings with company, salary range, fit score, match reasons, and where to apply
+### AI-Powered (Phase 2)
+- **Rewrite Resume** — full rewrite tailored to a target JD, with change summary
+- **Generate Cover Letter** — 250–350 word personalized letter with tone selector (confident / warm / direct / storytelling)
+- **Find Matching Jobs** — 6 curated openings with company, salary range, fit score, and where to apply
 
 ### Other
-- History of past analyses per user (anonymous user ID in localStorage)
-- Heuristic fallback engine when AI is unavailable (so the app always works)
+- Per-user analysis history (anonymous ID via localStorage)
+- Heuristic fallback engine — app works even without AI
 
-## Tech stack
+---
 
-- **Framework:** Next.js 15 (App Router)
-- **UI:** Tailwind CSS + shadcn/ui + lucide-react icons + sonner toasts
-- **DB:** MongoDB
-- **Parsing:** `pdf-parse`, `mammoth`
-- **AI:** Google Gemini 2.5 Flash via `@google/generative-ai` (structured JSON output)
-- **Fallback analyzer:** pure JS heuristic engine in `/lib/heuristic_analyzer.js`
+## Tech Stack
 
-## Run locally
+| Layer | Tech |
+|-------|------|
+| Framework | Next.js 15 (App Router) |
+| UI | Tailwind CSS + shadcn/ui + lucide-react + sonner |
+| Database | MongoDB |
+| Parsing | pdf-parse, mammoth |
+| AI | Google Gemini 2.5 Flash (`@google/generative-ai`) |
+| Fallback | Pure JS heuristic engine |
+
+---
+
+## Run Locally
 
 ```bash
-git clone <your-repo>
-cd careerlens
+git clone https://github.com/cyscodic/CareerLens.git
+cd CareerLens
 yarn install
+```
 
-# Create .env in the project root (do not commit)
-cat > .env << EOF
+Create a `.env` file in the root:
+
+```env
 MONGO_URL=mongodb://localhost:27017
 DB_NAME=careerlens
 NEXT_PUBLIC_BASE_URL=http://localhost:3000
-CORS_ORIGINS=*
-GEMINI_API_KEY=AIza...         # from https://aistudio.google.com/app/apikey
+GEMINI_API_KEY=AIza...
 GEMINI_MODEL=gemini-2.5-flash
-EOF
+```
 
-# Start MongoDB locally (brew services start mongodb-community)
-# OR use Atlas — paste the URI into MONGO_URL
-
+```bash
 yarn dev
 # Open http://localhost:3000
 ```
 
-## Project layout
+> Use MongoDB Atlas URI in `MONGO_URL` if you don't have MongoDB running locally.
+
+---
+
+## Project Structure
 
 ```
 /app
-  page.js                  # Frontend SPA (landing / input / results views, modals)
-  layout.js                # Root layout
-  api/[[...path]]/route.js # All backend routes (analyze, rewrite, cover-letter, job-alerts, history, parse-file)
+  page.js                     # Frontend SPA
+  layout.js                   # Root layout
+  api/[[...path]]/route.js    # All API routes
 /lib
-  heuristic_analyzer.js    # Pure-JS ATS analyzer (fallback)
-  gemini_client.js         # Gemini 2.5 Flash integration (analyze + rewrite + cover-letter + match-jobs)
-/components/ui             # shadcn/ui components
-.env                       # Secrets (gitignored)
-DEPLOY.md                  # Production deployment guide
+  gemini_client.js            # Gemini 2.5 Flash integration
+  heuristic_analyzer.js       # Fallback ATS analyzer
+/components/ui                # shadcn/ui components
 ```
 
-## API endpoints
+---
 
-| Method | Path | Description |
-| --- | --- | --- |
-| `POST` | `/api/parse-file` | Multipart upload → extract text from PDF/DOCX/TXT |
-| `POST` | `/api/analyze` | Full hybrid ATS analysis (Gemini → heuristic fallback) |
-| `POST` | `/api/rewrite` | AI-rewrite resume tailored to JD |
-| `POST` | `/api/cover-letter` | Generate personalized cover letter |
-| `POST` | `/api/job-alerts` | Generate matching job openings + save as alert |
-| `GET` | `/api/history?userId=...` | List past analyses for a user |
-| `GET` | `/api/job-alerts?userId=...` | List saved job alerts |
-| `GET` / `DELETE` | `/api/analysis/:id` | Fetch / delete single analysis |
-| `DELETE` | `/api/job-alerts/:id` | Delete a saved job alert |
+## API Reference
 
-## Engine fallback logic
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `POST` | `/api/parse-file` | Extract text from PDF/DOCX/TXT |
+| `POST` | `/api/analyze` | Full ATS analysis (Gemini + fallback) |
+| `POST` | `/api/rewrite` | AI resume rewrite |
+| `POST` | `/api/cover-letter` | Generate cover letter |
+| `POST` | `/api/job-alerts` | Find matching jobs + save alert |
+| `GET` | `/api/history?userId=...` | Past analyses for a user |
+| `GET` | `/api/job-alerts?userId=...` | Saved job alerts |
+| `GET/DELETE` | `/api/analysis/:id` | Fetch or delete analysis |
+| `DELETE` | `/api/job-alerts/:id` | Delete job alert |
+
+---
+
+## Fallback Logic
 
 ```
 POST /api/analyze
   ↓
-  if GEMINI_API_KEY set → try geminiAnalyze()
-                      ↓
-                      on success → return { engine: "gemini", analysis }
-                      on failure → fall back to heuristic
-  else → use heuristic
+  Gemini available? → geminiAnalyze()
+    ✓ success  →  { engine: "gemini", analysis }
+    ✗ failure  →  heuristic fallback
+  No API key?  → heuristic fallback
 ```
 
-This makes the app resilient: Gemini quota, network, or parsing errors never break the user experience.
+Gemini quota errors or network issues never break the user experience.
+
+---
+
+## Deploy
+
+See [DEPLOY.md](./DEPLOY.md) for a 15-minute guide (Vercel + MongoDB Atlas + Gemini, all free tiers).
