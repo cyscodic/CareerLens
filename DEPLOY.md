@@ -36,8 +36,6 @@ yarn install
 5. **Connect** → **Drivers** → copy the URI:
 
 ```
-mongodb+srv://YOUR_USER:YOUR_PASSWORD@cluster0.xxxxx.mongodb.net/?retryWrites=true&w=majority
-```
 
 Replace `YOUR_PASSWORD` with the password you saved.
 
