@@ -10,8 +10,9 @@ import { Progress } from '@/components/ui/progress'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Separator } from '@/components/ui/separator'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
-import { Sparkles, Upload, FileText, Target, AlertTriangle, CheckCircle2, XCircle, Lightbulb, ListChecks, Briefcase, History, Loader2, ArrowRight, TrendingUp, BookOpen, Trash2, Brain } from 'lucide-react'
+import { Sparkles, Upload, FileText, Target, AlertTriangle, CheckCircle2, XCircle, Lightbulb, ListChecks, Briefcase, History, Loader2, ArrowRight, TrendingUp, BookOpen, Trash2, Brain, Wand2, Mail, Search, Copy, Check, ExternalLink, X } from 'lucide-react'
 import { toast, Toaster } from 'sonner'
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog'
 
 function getUserId() {
   if (typeof window === 'undefined') return 'anonymous'
@@ -193,7 +194,7 @@ function InputPanel({ onAnalyze, loading }) {
           onClick={() => onAnalyze({ resumeText, jobDescription, resumeName: resumeName || 'Untitled Resume', jobTitle })}
           className="bg-indigo-600 hover:bg-indigo-700 text-white px-8 shadow-lg shadow-indigo-200"
         >
-          {loading ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Analyzing...</> : <><Sparkles className="w-4 h-4 mr-2" /> Analyze Resume</>}
+          {loading ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Analyzing with Gemini 2.5...</> : <><Sparkles className="w-4 h-4 mr-2" /> Analyze Resume</>}
         </Button>
       </div>
     </div>
@@ -232,14 +233,84 @@ function ResultsView({ result, onNew }) {
     skill_coverage: 'Skill Coverage',
     experience_fit: 'Experience Fit',
   }
+  const [actionLoading, setActionLoading] = useState(null) // 'rewrite' | 'cover' | 'jobs' | null
+  const [rewriteData, setRewriteData] = useState(null)
+  const [coverData, setCoverData] = useState(null)
+  const [jobsData, setJobsData] = useState(null)
+  const [companyName, setCompanyName] = useState('')
+  const [coverTone, setCoverTone] = useState('confident and professional')
+  const [copied, setCopied] = useState(false)
+  const userId = typeof window !== 'undefined' ? localStorage.getItem('cl_user_id') || 'anonymous' : 'anonymous'
+
+  async function callAction(endpoint, body, setter, key) {
+    setActionLoading(key)
+    try {
+      const r = await fetch(endpoint, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
+      const data = await r.json()
+      if (!r.ok) throw new Error(data.error || 'Failed')
+      setter(data)
+      toast.success(`${key} ready`)
+    } catch (e) { toast.error(e.message) }
+    finally { setActionLoading(null) }
+  }
+
+  function doCopy(text) {
+    navigator.clipboard.writeText(text)
+    setCopied(true)
+    setTimeout(() => setCopied(false), 2000)
+    toast.success('Copied to clipboard')
+  }
+
   return (
     <div className="container mx-auto px-6 py-8 max-w-7xl">
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex items-center justify-between mb-6 flex-wrap gap-3">
         <div>
           <h2 className="text-2xl font-bold text-slate-900">{result.resumeName}</h2>
           {result.jobTitle && <p className="text-sm text-slate-500">Target: {result.jobTitle}</p>}
+          {result.engine === 'gemini' && (
+            <Badge className="mt-2 bg-gradient-to-r from-blue-500 to-purple-600 text-white border-0">
+              <Sparkles className="w-3 h-3 mr-1" /> Powered by Gemini 2.5 Flash
+            </Badge>
+          )}
         </div>
         <Button variant="outline" onClick={onNew}><Sparkles className="w-4 h-4 mr-2" /> New Analysis</Button>
+      </div>
+
+      {/* Phase 2 action buttons */}
+      <div className="grid md:grid-cols-3 gap-3 mb-6">
+        <Button
+          onClick={() => callAction('/api/rewrite', { resumeText: result.resumeText, jobDescription: result.jobDescription, userId }, setRewriteData, 'rewrite')}
+          disabled={actionLoading === 'rewrite'}
+          className="bg-gradient-to-r from-violet-600 to-purple-600 hover:opacity-90 text-white h-auto py-4"
+        >
+          {actionLoading === 'rewrite' ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Wand2 className="w-4 h-4 mr-2" />}
+          <div className="text-left">
+            <div className="font-semibold">Rewrite My Resume</div>
+            <div className="text-xs opacity-90">Tailored to this JD</div>
+          </div>
+        </Button>
+        <Button
+          onClick={() => callAction('/api/cover-letter', { resumeText: result.resumeText, jobDescription: result.jobDescription, jobTitle: result.jobTitle, companyName, tone: coverTone, userId }, setCoverData, 'cover')}
+          disabled={actionLoading === 'cover' || !result.jobDescription}
+          className="bg-gradient-to-r from-pink-500 to-rose-600 hover:opacity-90 text-white h-auto py-4 disabled:opacity-50"
+        >
+          {actionLoading === 'cover' ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Mail className="w-4 h-4 mr-2" />}
+          <div className="text-left">
+            <div className="font-semibold">Generate Cover Letter</div>
+            <div className="text-xs opacity-90">{result.jobDescription ? 'Personalized to JD' : 'Add a JD first'}</div>
+          </div>
+        </Button>
+        <Button
+          onClick={() => callAction('/api/job-alerts', { resumeText: result.resumeText, query: result.jobTitle, name: result.jobTitle || 'My matches', userId }, setJobsData, 'jobs')}
+          disabled={actionLoading === 'jobs'}
+          className="bg-gradient-to-r from-emerald-500 to-teal-600 hover:opacity-90 text-white h-auto py-4"
+        >
+          {actionLoading === 'jobs' ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Search className="w-4 h-4 mr-2" />}
+          <div className="text-left">
+            <div className="font-semibold">Find Matching Jobs</div>
+            <div className="text-xs opacity-90">6 fits + where to apply</div>
+          </div>
+        </Button>
       </div>
 
       {/* Top score cards */}
@@ -461,6 +532,126 @@ function ResultsView({ result, onNew }) {
           </Card>
         </TabsContent>
       </Tabs>
+
+      {/* Rewrite Dialog */}
+      <Dialog open={!!rewriteData} onOpenChange={(o) => !o && setRewriteData(null)}>
+        <DialogContent className="max-w-5xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2"><Wand2 className="w-5 h-5 text-violet-600" /> Rewritten Resume</DialogTitle>
+            <DialogDescription>Tailored to your target JD. Facts preserved — nothing invented.</DialogDescription>
+          </DialogHeader>
+          {rewriteData && (
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <Badge variant="outline" className="text-xs">Tone: {rewriteData.result?.tone}</Badge>
+                <Button size="sm" variant="outline" onClick={() => doCopy(rewriteData.result?.rewritten_resume || '')}>
+                  {copied ? <Check className="w-4 h-4 mr-2" /> : <Copy className="w-4 h-4 mr-2" />} Copy
+                </Button>
+              </div>
+              <div className="bg-slate-50 border border-slate-200 rounded-lg p-4 max-h-[60vh] overflow-y-auto">
+                <pre className="whitespace-pre-wrap font-mono text-xs text-slate-800">{rewriteData.result?.rewritten_resume}</pre>
+              </div>
+              <Card>
+                <CardHeader className="pb-2"><CardTitle className="text-sm">What changed</CardTitle></CardHeader>
+                <CardContent className="space-y-1">
+                  {rewriteData.result?.change_summary?.map((c, i) => (
+                    <p key={i} className="text-xs text-slate-600">• {c}</p>
+                  ))}
+                </CardContent>
+              </Card>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Cover Letter Dialog */}
+      <Dialog open={!!coverData} onOpenChange={(o) => !o && setCoverData(null)}>
+        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2"><Mail className="w-5 h-5 text-pink-600" /> Cover Letter</DialogTitle>
+            <DialogDescription>{coverData?.result?.word_count} words • Personalized using your resume</DialogDescription>
+          </DialogHeader>
+          {coverData && (
+            <div className="space-y-4">
+              <div className="flex justify-end">
+                <Button size="sm" variant="outline" onClick={() => doCopy(coverData.result?.cover_letter || '')}>
+                  {copied ? <Check className="w-4 h-4 mr-2" /> : <Copy className="w-4 h-4 mr-2" />} Copy
+                </Button>
+              </div>
+              <div className="bg-gradient-to-br from-pink-50/30 to-white border border-pink-200 rounded-lg p-6 max-h-[60vh] overflow-y-auto">
+                <pre className="whitespace-pre-wrap font-serif text-sm text-slate-800 leading-relaxed">{coverData.result?.cover_letter}</pre>
+              </div>
+              {coverData.result?.key_matches?.length > 0 && (
+                <Card>
+                  <CardHeader className="pb-2"><CardTitle className="text-sm">Key resume facts used</CardTitle></CardHeader>
+                  <CardContent className="space-y-1">
+                    {coverData.result.key_matches.map((m, i) => (
+                      <p key={i} className="text-xs text-slate-600">✓ {m}</p>
+                    ))}
+                  </CardContent>
+                </Card>
+              )}
+              <div className="grid grid-cols-2 gap-2">
+                <Input placeholder="Company name (regenerate)" value={companyName} onChange={(e) => setCompanyName(e.target.value)} className="text-xs" />
+                <select value={coverTone} onChange={(e) => setCoverTone(e.target.value)} className="text-xs border border-slate-200 rounded px-3">
+                  <option value="confident and professional">Confident & professional</option>
+                  <option value="warm and enthusiastic">Warm & enthusiastic</option>
+                  <option value="direct and concise">Direct & concise</option>
+                  <option value="storytelling">Storytelling</option>
+                </select>
+              </div>
+              <Button size="sm" variant="outline" className="w-full"
+                onClick={() => callAction('/api/cover-letter', { resumeText: result.resumeText, jobDescription: result.jobDescription, jobTitle: result.jobTitle, companyName, tone: coverTone, userId }, setCoverData, 'cover')}
+                disabled={actionLoading === 'cover'}>
+                {actionLoading === 'cover' ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Sparkles className="w-4 h-4 mr-2" />} Regenerate
+              </Button>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Jobs Dialog */}
+      <Dialog open={!!jobsData} onOpenChange={(o) => !o && setJobsData(null)}>
+        <DialogContent className="max-w-5xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2"><Search className="w-5 h-5 text-emerald-600" /> Matching Jobs</DialogTitle>
+            <DialogDescription>{jobsData?.jobs?.length} roles matched to your resume. Click "Where to apply" to find live listings.</DialogDescription>
+          </DialogHeader>
+          {jobsData && (
+            <div className="grid md:grid-cols-2 gap-3">
+              {jobsData.jobs?.map((j, i) => (
+                <Card key={i} className="border-slate-200 hover:border-emerald-300 hover:shadow-md transition">
+                  <CardContent className="p-4 space-y-2">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0 flex-1">
+                        <p className="font-semibold text-slate-900 truncate">{j.title}</p>
+                        <p className="text-xs text-slate-600 truncate">{j.company} • {j.location}</p>
+                      </div>
+                      <Badge className={scoreBg(j.fit_score) + ' text-white border-0 shrink-0'}>{j.fit_score}</Badge>
+                    </div>
+                    <div className="flex flex-wrap items-center gap-2 text-xs">
+                      <Badge variant="secondary" className="font-mono">{j.salary_range}</Badge>
+                      <Badge variant="outline" className="capitalize">{j.seniority}</Badge>
+                    </div>
+                    <div>
+                      <p className="text-xs font-semibold text-slate-500 mb-1">Why it fits</p>
+                      <ul className="text-xs text-slate-700 space-y-0.5">
+                        {j.match_reasons?.slice(0,3).map((r, k) => <li key={k}>• {r}</li>)}
+                      </ul>
+                    </div>
+                    {j.key_requirements?.length > 0 && (
+                      <div className="flex flex-wrap gap-1 pt-1 border-t border-slate-100">
+                        {j.key_requirements.slice(0,5).map((k, idx) => <Badge key={idx} variant="outline" className="text-[10px]">{k}</Badge>)}
+                      </div>
+                    )}
+                    <p className="text-xs text-emerald-700 pt-1 flex items-center gap-1"><ExternalLink className="w-3 h-3" /> {j.where_to_apply}</p>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
@@ -571,7 +762,7 @@ function App() {
 
       <footer className="border-t border-slate-200 mt-12">
         <div className="container mx-auto px-6 py-6 max-w-7xl text-xs text-slate-500 text-center">
-          CareerLens • Heuristic ATS engine • Free, fast, explainable — no AI needed
+          CareerLens • Powered by Gemini 2.5 Flash • Honest, explainable, AI-driven feedback
         </div>
       </footer>
     </div>

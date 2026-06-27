@@ -3,6 +3,7 @@ import { v4 as uuidv4 } from 'uuid'
 import { NextResponse } from 'next/server'
 import mammoth from 'mammoth'
 import { analyzeHeuristic } from '@/lib/heuristic_analyzer'
+import { geminiAnalyze, geminiRewriteResume, geminiCoverLetter, geminiMatchJobs } from '@/lib/gemini_client'
 
 export const runtime = 'nodejs'
 export const maxDuration = 120
@@ -46,9 +47,18 @@ async function parseDocxBuffer(buf) {
   return result.value || ''
 }
 
-// ---- Analysis (heuristic, no AI needed) ----
-function runAnalysis(resumeText, jobDescription) {
-  return analyzeHeuristic(resumeText, jobDescription)
+// ---- Analysis: try Gemini first, fall back to heuristic ----
+async function runAnalysis(resumeText, jobDescription) {
+  const useAI = !!process.env.GEMINI_API_KEY
+  if (useAI) {
+    try {
+      const result = await geminiAnalyze(resumeText, jobDescription)
+      return { analysis: result, engine: 'gemini' }
+    } catch (e) {
+      console.warn('Gemini failed, falling back to heuristic:', e.message)
+    }
+  }
+  return { analysis: analyzeHeuristic(resumeText, jobDescription), engine: 'heuristic' }
 }
 
 // ---- Route handlers ----
@@ -109,12 +119,14 @@ async function handleRoute(request, { params }) {
         return handleCORS(NextResponse.json({ error: 'Resume text too short. Please paste a real resume.' }, { status: 400 }))
       }
 
-      let analysis
+      let analysis, engine
       try {
-        analysis = runAnalysis(resumeText, jobDescription)
+        const r = await runAnalysis(resumeText, jobDescription)
+        analysis = r.analysis
+        engine = r.engine
       } catch (e) {
-        console.error('LLM error:', e)
-        return handleCORS(NextResponse.json({ error: 'AI analysis failed: ' + (e.message || 'unknown') }, { status: 500 }))
+        console.error('Analysis error:', e)
+        return handleCORS(NextResponse.json({ error: 'Analysis failed: ' + (e.message || 'unknown') }, { status: 500 }))
       }
 
       const doc = {
@@ -125,11 +137,111 @@ async function handleRoute(request, { params }) {
         resumeText,
         jobDescription,
         analysis,
+        engine,
         createdAt: new Date().toISOString(),
       }
       await db.collection('analyses').insertOne(doc)
       const { _id, ...clean } = doc
       return handleCORS(NextResponse.json(clean))
+    }
+
+    // ---- POST /api/rewrite ----
+    if (route === '/rewrite' && method === 'POST') {
+      const body = await request.json()
+      const resumeText = (body.resumeText || '').trim()
+      const jobDescription = (body.jobDescription || '').trim()
+      const userId = body.userId || 'anonymous'
+      if (!resumeText || resumeText.length < 30) {
+        return handleCORS(NextResponse.json({ error: 'Resume text required' }, { status: 400 }))
+      }
+      if (!process.env.GEMINI_API_KEY) {
+        return handleCORS(NextResponse.json({ error: 'AI key not configured' }, { status: 503 }))
+      }
+      try {
+        const result = await geminiRewriteResume(resumeText, jobDescription)
+        const doc = { id: uuidv4(), userId, type: 'rewrite', input: { resumeText, jobDescription }, result, createdAt: new Date().toISOString() }
+        await db.collection('rewrites').insertOne(doc)
+        const { _id, ...clean } = doc
+        return handleCORS(NextResponse.json(clean))
+      } catch (e) {
+        console.error('Rewrite error:', e)
+        return handleCORS(NextResponse.json({ error: 'Rewrite failed: ' + e.message }, { status: 500 }))
+      }
+    }
+
+    // ---- POST /api/cover-letter ----
+    if (route === '/cover-letter' && method === 'POST') {
+      const body = await request.json()
+      const resumeText = (body.resumeText || '').trim()
+      const jobDescription = (body.jobDescription || '').trim()
+      const jobTitle = body.jobTitle || ''
+      const companyName = body.companyName || ''
+      const tone = body.tone || 'confident and professional'
+      const userId = body.userId || 'anonymous'
+      if (!resumeText || !jobDescription) {
+        return handleCORS(NextResponse.json({ error: 'Resume and JD both required' }, { status: 400 }))
+      }
+      if (!process.env.GEMINI_API_KEY) {
+        return handleCORS(NextResponse.json({ error: 'AI key not configured' }, { status: 503 }))
+      }
+      try {
+        const result = await geminiCoverLetter(resumeText, jobDescription, jobTitle, companyName, tone)
+        const doc = { id: uuidv4(), userId, type: 'cover_letter', jobTitle, companyName, tone, result, createdAt: new Date().toISOString() }
+        await db.collection('cover_letters').insertOne(doc)
+        const { _id, ...clean } = doc
+        return handleCORS(NextResponse.json(clean))
+      } catch (e) {
+        console.error('Cover letter error:', e)
+        return handleCORS(NextResponse.json({ error: 'Cover letter failed: ' + e.message }, { status: 500 }))
+      }
+    }
+
+    // ---- POST /api/job-alerts (create saved search + matched jobs) ----
+    if (route === '/job-alerts' && method === 'POST') {
+      const body = await request.json()
+      const userId = body.userId || 'anonymous'
+      const resumeText = (body.resumeText || '').trim()
+      const query = (body.query || '').trim()
+      const name = body.name || query || 'Job alert'
+      if (!resumeText) {
+        return handleCORS(NextResponse.json({ error: 'Resume required to match jobs' }, { status: 400 }))
+      }
+      if (!process.env.GEMINI_API_KEY) {
+        return handleCORS(NextResponse.json({ error: 'AI key not configured' }, { status: 503 }))
+      }
+      try {
+        const result = await geminiMatchJobs(resumeText, query)
+        const doc = {
+          id: uuidv4(),
+          userId,
+          name,
+          query,
+          jobs: result.jobs || [],
+          createdAt: new Date().toISOString(),
+        }
+        await db.collection('job_alerts').insertOne(doc)
+        const { _id, ...clean } = doc
+        return handleCORS(NextResponse.json(clean))
+      } catch (e) {
+        console.error('Job alerts error:', e)
+        return handleCORS(NextResponse.json({ error: 'Job matching failed: ' + e.message }, { status: 500 }))
+      }
+    }
+
+    // ---- GET /api/job-alerts?userId=xxx ----
+    if (route === '/job-alerts' && method === 'GET') {
+      const url = new URL(request.url)
+      const userId = url.searchParams.get('userId') || 'anonymous'
+      const items = await db.collection('job_alerts').find({ userId }).sort({ createdAt: -1 }).limit(20).toArray()
+      const cleaned = items.map(({ _id, ...rest }) => rest)
+      return handleCORS(NextResponse.json(cleaned))
+    }
+
+    // ---- DELETE /api/job-alerts/:id ----
+    if (route.startsWith('/job-alerts/') && method === 'DELETE') {
+      const id = route.split('/')[2]
+      await db.collection('job_alerts').deleteOne({ id })
+      return handleCORS(NextResponse.json({ ok: true }))
     }
 
     // ---- GET /api/history?userId=xxx ----

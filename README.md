@@ -1,24 +1,32 @@
 # CareerLens
 
-AI-style resume analyzer & ATS scorer. Upload PDF/DOCX/TXT or paste text, paste a job description, get an instant explainable ATS report — strengths, weak points, red flags, missing keywords, tailored bullets, project ideas, and an action plan.
+**AI-powered resume analyzer & ATS scorer.** Upload PDF/DOCX/TXT or paste text, paste a job description, and get instant explainable feedback — ATS score, strengths, weak points, red flags, missing keywords, tailored bullets, project ideas, action plan + AI resume rewriting, cover letter generation, and job matching.
 
-**Current mode:** Heuristic engine (no AI, free, fast). You can later swap in OpenAI / Gemini / Anthropic by adding a key.
+> 📦 Want to deploy this? See **[DEPLOY.md](./DEPLOY.md)** for a 15-minute step-by-step guide (Vercel + MongoDB Atlas + Gemini, all free tiers).
 
 ## Features
 
-- Upload PDF / DOCX / TXT resume (PDFs parsed via `pdf-parse`, DOCX via `mammoth`)
-- Paste text resume + job description
-- **6-dimensional ATS score** (keyword match, semantic similarity, structure & readability, role fit, skill coverage, experience fit) — each fully explained
-- Job fit score
+### Core analysis (MVP)
+- Upload PDF / DOCX / TXT resume (parsed via `pdf-parse` + `mammoth`) or paste text
+- **6-dimensional ATS score** — keyword match, semantic similarity, structure & readability, role fit, skill coverage, experience fit — each fully explained
+- Job fit score against a specific JD
 - Strengths, weak points (with severity), red flags
 - Missing keywords with importance + where-to-add hints
 - Skill gaps with how-to-learn suggestions
-- Tailored bullet rewrites
+- Tailored bullet rewrites (faithful — never invented)
 - Project ideas to close skill gaps
-- Role recommendations
+- Role recommendations with fit scores
 - Short / medium / long-term action plan
-- Interview prep questions
-- History of past analyses (per user) stored in MongoDB
+- Interview prep questions tailored to the resume
+
+### Phase 2 (AI-powered)
+- **Rewrite Resume** — full resume rewrite tailored to a target JD, with change summary
+- **Generate Cover Letter** — 250-350 word personalized letter with company-specific hook, tone selector (confident / warm / direct / storytelling)
+- **Find Matching Jobs** — 6 realistic job openings with company, salary range, fit score, match reasons, and where to apply
+
+### Other
+- History of past analyses per user (anonymous user ID in localStorage)
+- Heuristic fallback engine when AI is unavailable (so the app always works)
 
 ## Tech stack
 
@@ -26,73 +34,72 @@ AI-style resume analyzer & ATS scorer. Upload PDF/DOCX/TXT or paste text, paste 
 - **UI:** Tailwind CSS + shadcn/ui + lucide-react icons + sonner toasts
 - **DB:** MongoDB
 - **Parsing:** `pdf-parse`, `mammoth`
-- **Analyzer:** Pure JS heuristic engine (`/lib/heuristic_analyzer.js`)
+- **AI:** Google Gemini 2.5 Flash via `@google/generative-ai` (structured JSON output)
+- **Fallback analyzer:** pure JS heuristic engine in `/lib/heuristic_analyzer.js`
 
 ## Run locally
 
 ```bash
-# 1. Clone & install
 git clone <your-repo>
 cd careerlens
 yarn install
 
-# 2. Set up env (.env in project root)
+# Create .env in the project root (do not commit)
 cat > .env << EOF
 MONGO_URL=mongodb://localhost:27017
 DB_NAME=careerlens
 NEXT_PUBLIC_BASE_URL=http://localhost:3000
 CORS_ORIGINS=*
+GEMINI_API_KEY=AIza...         # from https://aistudio.google.com/app/apikey
+GEMINI_MODEL=gemini-2.5-flash
 EOF
 
-# 3. Start MongoDB locally (or use Atlas)
-# macOS:    brew services start mongodb-community
-# Ubuntu:   sudo systemctl start mongod
-# Or use MongoDB Atlas free tier: https://cloud.mongodb.com (paste the URI into MONGO_URL)
+# Start MongoDB locally (brew services start mongodb-community)
+# OR use Atlas — paste the URI into MONGO_URL
 
-# 4. Run
 yarn dev
 # Open http://localhost:3000
 ```
-
-## Deploy to Vercel (free)
-
-1. Push the repo to GitHub.
-2. Go to [vercel.com](https://vercel.com) → New Project → import your repo.
-3. Add environment variables in Vercel dashboard:
-   - `MONGO_URL` = your MongoDB Atlas connection string (free M0 cluster works)
-   - `DB_NAME` = `careerlens`
-   - `NEXT_PUBLIC_BASE_URL` = your Vercel URL (e.g., `https://careerlens.vercel.app`)
-   - `CORS_ORIGINS` = `*`
-4. Click Deploy. Done.
-
-## Adding AI (optional, later)
-
-When you have an LLM key, the heuristic engine can be replaced or augmented with AI for richer analysis:
-
-- Get a free Gemini key: https://aistudio.google.com/app/apikey (generous free tier)
-- Get an OpenAI key: https://platform.openai.com/api-keys (pay-as-you-go)
-
-Then drop the key into `.env` and swap the `runAnalysis` call in `/app/api/[[...path]]/route.js` to use the LLM client. The response schema is identical so the UI works unchanged.
 
 ## Project layout
 
 ```
 /app
-  page.js                 # Frontend (single-page UI with landing/input/results views)
-  layout.js               # Root layout + metadata
-  api/[[...path]]/route.js  # All backend API routes
+  page.js                  # Frontend SPA (landing / input / results views, modals)
+  layout.js                # Root layout
+  api/[[...path]]/route.js # All backend routes (analyze, rewrite, cover-letter, job-alerts, history, parse-file)
 /lib
-  heuristic_analyzer.js   # The ATS analysis engine
-/components/ui            # shadcn/ui components (Button, Card, Tabs, etc.)
-.env                      # Env vars (MONGO_URL, DB_NAME)
+  heuristic_analyzer.js    # Pure-JS ATS analyzer (fallback)
+  gemini_client.js         # Gemini 2.5 Flash integration (analyze + rewrite + cover-letter + match-jobs)
+/components/ui             # shadcn/ui components
+.env                       # Secrets (gitignored)
+DEPLOY.md                  # Production deployment guide
 ```
 
-## API reference
+## API endpoints
 
 | Method | Path | Description |
 | --- | --- | --- |
-| `POST` | `/api/parse-file` | Multipart upload, returns extracted text |
-| `POST` | `/api/analyze` | `{ resumeText, jobDescription, userId, resumeName, jobTitle }` → full analysis |
+| `POST` | `/api/parse-file` | Multipart upload → extract text from PDF/DOCX/TXT |
+| `POST` | `/api/analyze` | Full hybrid ATS analysis (Gemini → heuristic fallback) |
+| `POST` | `/api/rewrite` | AI-rewrite resume tailored to JD |
+| `POST` | `/api/cover-letter` | Generate personalized cover letter |
+| `POST` | `/api/job-alerts` | Generate matching job openings + save as alert |
 | `GET` | `/api/history?userId=...` | List past analyses for a user |
-| `GET` | `/api/analysis/:id` | Full analysis by id |
-| `DELETE` | `/api/analysis/:id` | Delete an analysis |
+| `GET` | `/api/job-alerts?userId=...` | List saved job alerts |
+| `GET` / `DELETE` | `/api/analysis/:id` | Fetch / delete single analysis |
+| `DELETE` | `/api/job-alerts/:id` | Delete a saved job alert |
+
+## Engine fallback logic
+
+```
+POST /api/analyze
+  ↓
+  if GEMINI_API_KEY set → try geminiAnalyze()
+                      ↓
+                      on success → return { engine: "gemini", analysis }
+                      on failure → fall back to heuristic
+  else → use heuristic
+```
+
+This makes the app resilient: Gemini quota, network, or parsing errors never break the user experience.
