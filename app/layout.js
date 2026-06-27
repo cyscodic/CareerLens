@@ -2,8 +2,8 @@ import './globals.css'
 import { Providers } from './providers'
 
 export const metadata = {
-  title: 'CareerLens — AI Resume Analyzer & ATS Scorer',
-  description: 'Upload your resume, paste a job description, get instant ATS score, missing keywords, red flags, and tailored improvements — powered by AI.',
+  title: 'CareerLens',
+  description: 'AI-powered resume analyzer & ATS scorer',
 }
 
 export default function RootLayout({ children }) {
