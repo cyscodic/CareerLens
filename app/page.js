@@ -255,10 +255,41 @@ function ResultsView({ result, onNew }) {
   }
 
   function doCopy(text) {
-    navigator.clipboard.writeText(text)
-    setCopied(true)
-    setTimeout(() => setCopied(false), 2000)
-    toast.success('Copied to clipboard')
+    try {
+      // Try modern clipboard API first
+      if (navigator.clipboard && window.isSecureContext) {
+        navigator.clipboard.writeText(text).then(
+          () => { setCopied(true); setTimeout(() => setCopied(false), 2000); toast.success('Copied to clipboard') },
+          () => fallbackCopy(text)
+        )
+      } else {
+        fallbackCopy(text)
+      }
+    } catch {
+      fallbackCopy(text)
+    }
+  }
+
+  function fallbackCopy(text) {
+    try {
+      const ta = document.createElement('textarea')
+      ta.value = text
+      ta.style.position = 'fixed'
+      ta.style.top = '-9999px'
+      ta.style.opacity = '0'
+      document.body.appendChild(ta)
+      ta.focus()
+      ta.select()
+      const ok = document.execCommand('copy')
+      document.body.removeChild(ta)
+      if (ok) {
+        setCopied(true); setTimeout(() => setCopied(false), 2000); toast.success('Copied to clipboard')
+      } else {
+        toast.error('Copy failed — please select and copy manually')
+      }
+    } catch (e) {
+      toast.error('Copy failed: ' + e.message)
+    }
   }
 
   return (
