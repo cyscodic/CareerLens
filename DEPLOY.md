@@ -1,141 +1,115 @@
-# 🚀 CareerLens Deployment Guide
+# CareerLens — Deployment Guide
 
-Step-by-step guide to deploy CareerLens to production on **Vercel + MongoDB Atlas** (both free tiers). Total time: ~15 minutes.
+> Deploy to production in ~15 minutes using Vercel + MongoDB Atlas + Gemini (all free tiers).
+
+🔗 **Live demo:** [career-lens-codic.vercel.app](https://career-lens-codic.vercel.app)
 
 ---
 
 ## Prerequisites
 
-- A GitHub account
-- A Google account (for Gemini API)
-- A Vercel account (free) — sign up at https://vercel.com (use GitHub login)
-- A MongoDB Atlas account (free) — sign up at https://cloud.mongodb.com
+- GitHub account
+- Google account (for Gemini API)
+- [Vercel](https://vercel.com) account (free, sign up with GitHub)
+- [MongoDB Atlas](https://cloud.mongodb.com) account (free)
 
 ---
 
-## Step 1 — Push the code to GitHub (3 min)
+## Step 1 — Push to GitHub (2 min)
 
 ```bash
-# In /app folder on your laptop:
-cd /path/to/careerlens
-
-git init
-git add .
-git commit -m "CareerLens MVP"
-
-# Create a new empty repo on GitHub (https://github.com/new), then:
-git branch -M main
-git remote add origin https://github.com/YOUR_USERNAME/careerlens.git
-git push -u origin main
+git clone https://github.com/cyscodic/CareerLens.git
+cd CareerLens
+yarn install
 ```
 
-⚠️ **Important:** Make sure `.env` is in `.gitignore` (it should already be). Never commit secrets.
+> ⚠️ Make sure `.env` is in `.gitignore`. Never commit secrets.
 
 ---
 
-## Step 2 — Set up MongoDB Atlas (5 min)
+## Step 2 — MongoDB Atlas (5 min)
 
-1. Go to https://cloud.mongodb.com → sign up / log in.
-2. Click **Build a Database** → choose **M0 Free** (512 MB, free forever).
-3. Pick a region close to you. Click **Create**.
-4. **Database Access**:
-   - Click "Database Access" in the left sidebar.
-   - Click "Add New Database User".
-   - Username: `careerlens_user`. Password: click "Autogenerate" — **copy and save it**.
-   - Built-in role: "Atlas admin" (or "Read and write to any database").
-   - Click "Add User".
-5. **Network Access**:
-   - Click "Network Access" → "Add IP Address" → click **"Allow Access from Anywhere"** (0.0.0.0/0). Vercel needs this since its IPs change.
-   - Click "Confirm".
-6. **Get the connection string**:
-   - Go back to "Database" → click "Connect" on your cluster.
-   - Choose "Drivers" → Node.js.
-   - Copy the connection string. It will look like:
-     ```
-     mongodb+srv://careerlens_user:<password>@cluster0.abcde.mongodb.net/?retryWrites=true&w=majority
-     ```
-   - Replace `<password>` with the password you saved. Keep this safe.
+1. Go to [cloud.mongodb.com](https://cloud.mongodb.com) → **Build a Database** → choose **M0 Free**
+2. Pick a region → **Create**
+3. **Database Access** → Add user → set username + password (save it)
+4. **Network Access** → Add IP → **Allow Access from Anywhere** (`0.0.0.0/0`)
+5. **Connect** → **Drivers** → copy the URI:
+
+```
+mongodb+srv://YOUR_USER:YOUR_PASSWORD@cluster0.xxxxx.mongodb.net/?retryWrites=true&w=majority
+```
+
+Replace `YOUR_PASSWORD` with the password you saved.
 
 ---
 
-## Step 3 — Get a Gemini API key (2 min)
+## Step 3 — Gemini API Key (1 min)
 
-1. Go to https://aistudio.google.com/app/apikey
-2. Click **"Create API key"** → choose a project (or create new).
-3. Copy the key (starts with `AIza...` typically).
+1. Go to [aistudio.google.com/app/apikey](https://aistudio.google.com/app/apikey)
+2. Click **Create API Key** → copy it (starts with `AIza...`)
 
-> **Note:** If your project shows a `limit: 0` quota error like ours did, click **"Get API key" → "Use in a new project"** to create a fresh project with default free-tier quota.
-
----
-
-## Step 4 — Deploy to Vercel (5 min)
-
-1. Go to https://vercel.com/new
-2. Click **"Import Git Repository"** → select your `careerlens` repo.
-3. Vercel auto-detects Next.js — leave all build settings as default.
-4. Expand **"Environment Variables"** and add these 5:
-
-   | Name | Value |
-   | --- | --- |
-   | `MONGO_URL` | Your Atlas connection string from Step 2 |
-   | `DB_NAME` | `careerlens` |
-   | `NEXT_PUBLIC_BASE_URL` | Leave blank for now — set after first deploy |
-   | `CORS_ORIGINS` | `*` |
-   | `GEMINI_API_KEY` | Your Gemini key from Step 3 |
-   | `GEMINI_MODEL` | `gemini-2.5-flash` |
-
-5. Click **Deploy**. Wait 2-3 minutes.
-6. Once deployed, Vercel gives you a URL like `https://careerlens-xyz.vercel.app`.
-7. Go to **Project Settings → Environment Variables** → set `NEXT_PUBLIC_BASE_URL` to your Vercel URL (no trailing slash).
-8. Go to **Deployments** → click "..." on the latest deployment → **Redeploy** (so the new env var takes effect).
+> If you hit quota limit, create a fresh project for default free-tier quota.
 
 ---
 
-## Step 5 — Test the live app
+## Step 4 — Deploy on Vercel (5 min)
 
-1. Open your Vercel URL in a browser.
-2. Click "Analyze My Resume", paste a resume + job description, hit "Analyze Resume".
-3. You should see the full report in ~10-30 seconds.
-4. Try "Rewrite My Resume", "Generate Cover Letter", and "Find Matching Jobs".
+1. Go to [vercel.com/new](https://vercel.com/new) → import `cyscodic/CareerLens`
+2. Vercel auto-detects Next.js — leave build settings as default
+3. Add these environment variables:
 
-✅ Done!
+| Key | Value |
+|-----|-------|
+| `MONGO_URL` | Your Atlas URI from Step 2 |
+| `DB_NAME` | `careerlens` |
+| `NEXT_PUBLIC_BASE_URL` | Leave blank for now |
+| `CORS_ORIGINS` | `*` |
+| `GEMINI_API_KEY` | Your Gemini key from Step 3 |
+| `GEMINI_MODEL` | `gemini-2.5-flash` |
+
+4. Click **Deploy** → wait 2–3 minutes
+5. Once live, copy your Vercel URL (e.g. `https://careerlens-xyz.vercel.app`)
+6. Go to **Settings → Environment Variables** → set `NEXT_PUBLIC_BASE_URL` to your URL
+7. **Deployments → Redeploy** to apply the new variable
 
 ---
 
-## Optional — Custom domain
+## Step 5 — Verify
 
-In Vercel, go to **Project Settings → Domains** → add your domain. Follow the DNS instructions. After the cert provisions (~5 min), your app is at `https://careerlens.yourdomain.com`.
+- Open your Vercel URL
+- Paste a resume + job description → click **Analyze Resume**
+- Test **Rewrite Resume**, **Generate Cover Letter**, **Find Matching Jobs**
 
 ---
 
-## Cost monitoring
+## Updating Later
 
-- **Vercel**: free tier — 100 GB bandwidth / month, unlimited builds. Should be free forever for low traffic.
-- **MongoDB Atlas M0**: free forever — 512 MB storage. Enough for ~10,000 resume analyses.
-- **Gemini API free tier**: 1,500 requests per day per model (gemini-2.5-flash). Plenty for personal/early-stage use. If you exceed, upgrade to pay-as-you-go (~$0.30 per 1M tokens).
+```bash
+git add .
+git commit -m "your update"
+git push origin main
+```
+
+Vercel auto-redeploys on every push to `main`.
+
+---
+
+## Cost
+
+| Service | Free Tier |
+|---------|-----------|
+| Vercel | 100 GB bandwidth/month, unlimited builds |
+| MongoDB Atlas M0 | 512 MB storage (~10,000 analyses) |
+| Gemini 2.5 Flash | 1,500 requests/day free |
 
 ---
 
 ## Troubleshooting
 
-**"MongoServerError: bad auth"** → wrong password in MONGO_URL. Re-copy from Atlas.
-
-**"MongoNetworkError"** → Atlas Network Access doesn't allow Vercel IPs. Set to `0.0.0.0/0`.
-
-**"Gemini API error: quota exceeded"** → you hit daily free limit. Wait 24h or enable billing on Google Cloud.
-
-**Resume analysis falls back to heuristic** → check Vercel logs (`vercel logs`). If Gemini errors out repeatedly, your project may need billing enabled or a fresh API key from a new project.
-
-**"Failed to parse file"** → some scanned PDFs have no text layer. Tell users to paste text instead.
-
----
-
-## Updating later
-
-```bash
-git add .
-git commit -m "Update something"
-git push origin main
-```
-
-Vercel automatically redeploys on every push to `main`. No CLI needed.
+| Error | Fix |
+|-------|-----|
+| `MongoServerError: bad auth` | Wrong password in `MONGO_URL` — re-copy from Atlas |
+| `MongoNetworkError` | Set Network Access to `0.0.0.0/0` in Atlas |
+| `Gemini quota exceeded` | Wait 24h or enable billing on Google Cloud |
+| Analysis falls back to heuristic | Check Vercel logs — Gemini key may need a fresh project |
+| `Failed to parse file` | Scanned PDF has no text layer — paste text instead |
