@@ -113,13 +113,14 @@ function analysisSchema() {
   }
 }
 
-async function runAnalysis(resumeText, jobDescription) {
+async function runAnalysis(resumeText, jobDescription, userId) {
   const openai = getOpenAI()
   const userMsg = `RESUME:\n"""\n${resumeText.slice(0, 18000)}\n"""\n\nJOB DESCRIPTION:\n"""\n${(jobDescription || '').slice(0, 8000) || '(No JD provided — give general ATS analysis and role recommendations from resume alone.)'}\n"""\n\nReturn structured JSON per the schema.`
 
   const resp = await openai.chat.completions.create({
     model: 'gpt-4o',
     temperature: 0.2,
+    user: userId || 'careerlens-user',
     response_format: {
       type: 'json_schema',
       json_schema: { name: 'resume_analysis', strict: true, schema: analysisSchema() },
@@ -128,6 +129,13 @@ async function runAnalysis(resumeText, jobDescription) {
       { role: 'system', content: ANALYSIS_SYSTEM },
       { role: 'user', content: userMsg },
     ],
+    // LiteLLM proxy budget mapping — pass user metadata
+    // @ts-ignore
+    metadata: { user_id: userId || 'careerlens-user', app: 'careerlens' },
+  }, {
+    headers: {
+      'x-user-id': userId || 'careerlens-user',
+    },
   })
   const txt = resp.choices?.[0]?.message?.content || '{}'
   return JSON.parse(txt)
@@ -193,7 +201,7 @@ async function handleRoute(request, { params }) {
 
       let analysis
       try {
-        analysis = await runAnalysis(resumeText, jobDescription)
+        analysis = await runAnalysis(resumeText, jobDescription, userId)
       } catch (e) {
         console.error('LLM error:', e)
         return handleCORS(NextResponse.json({ error: 'AI analysis failed: ' + (e.message || 'unknown') }, { status: 500 }))
