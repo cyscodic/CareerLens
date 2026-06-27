@@ -2,7 +2,6 @@
 
 **AI-powered resume analyzer & ATS scorer.** Upload PDF/DOCX/TXT or paste text, paste a job description, and get instant explainable feedback — ATS score, strengths, weak points, red flags, missing keywords, tailored bullets, project ideas, action plan + AI resume rewriting, cover letter generation, and job matching.
 
-> 📦 Want to deploy this? See **[DEPLOY.md](./DEPLOY.md)** for a 15-minute step-by-step guide (Vercel + MongoDB Atlas + Gemini, all free tiers).
 
 ## Features
 
